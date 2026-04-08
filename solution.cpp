@@ -4,6 +4,71 @@
 
 using namespace std;
 
+const int BUF_SIZE = 1 << 20;
+char buf[BUF_SIZE], *p1 = buf, *p2 = buf;
+inline char gc() {
+    return p1 == p2 && (p2 = (p1 = buf) + fread(buf, 1, BUF_SIZE, stdin), p1 == p2) ? EOF : *p1++;
+}
+inline int read_int() {
+    int x = 0, f = 1;
+    char ch = gc();
+    while (ch < '0' || ch > '9') {
+        if (ch == '-') f = -1;
+        if (ch == EOF) return -1;
+        ch = gc();
+    }
+    while (ch >= '0' && ch <= '9') {
+        x = x * 10 + ch - '0';
+        ch = gc();
+    }
+    return x * f;
+}
+inline long long read_ll() {
+    long long x = 0, f = 1;
+    char ch = gc();
+    while (ch < '0' || ch > '9') {
+        if (ch == '-') f = -1;
+        if (ch == EOF) return -1;
+        ch = gc();
+    }
+    while (ch >= '0' && ch <= '9') {
+        x = x * 10 + ch - '0';
+        ch = gc();
+    }
+    return x * f;
+}
+
+char out_buf[BUF_SIZE];
+int out_p = 0;
+inline void flush() {
+    fwrite(out_buf, 1, out_p, stdout);
+    out_p = 0;
+}
+inline void pc(char ch) {
+    if (out_p == BUF_SIZE) flush();
+    out_buf[out_p++] = ch;
+}
+inline void print_ll(long long x) {
+    if (x < 0) {
+        pc('-');
+        x = -x;
+    }
+    if (x == 0) {
+        pc('0');
+        return;
+    }
+    char stk[20];
+    int top = 0;
+    while (x) {
+        stk[++top] = x % 10 + '0';
+        x /= 10;
+    }
+    while (top) pc(stk[top--]);
+}
+inline void print_str(const char* s) {
+    while (*s) pc(*s++);
+}
+
 struct Query {
     int op;
     long long a, b, c;
@@ -95,20 +160,20 @@ int find_min(int p, int l, int r) {
 int root[100005];
 
 int main() {
-    ios_base::sync_with_stdio(false);
-    cin.tie(NULL);
-    
     int op;
-    while (cin >> op) {
+    while ((op = read_int()) != -1) {
         Query q;
         q.op = op;
         if (op == 0 || op == 1 || op == 3) {
-            cin >> q.a >> q.b;
+            q.a = read_ll();
+            q.b = read_ll();
             vals.push_back(q.b);
         } else if (op == 2) {
-            cin >> q.a;
+            q.a = read_ll();
         } else if (op == 4) {
-            cin >> q.a >> q.b >> q.c;
+            q.a = read_ll();
+            q.b = read_ll();
+            q.c = read_ll();
             vals.push_back(q.b);
             vals.push_back(q.c);
         }
@@ -149,23 +214,24 @@ int main() {
         } else if (q.op == 3) {
             int pos = lower_bound(vals.begin(), vals.end(), q.b) - vals.begin() + 1;
             if (query_count(root[q.a], 1, M, pos) > 0) {
-                cout << "true\n";
+                print_str("true\n");
                 it_a = q.a;
                 it_val = q.b;
                 valid = true;
             } else {
-                cout << "false\n";
+                print_str("false\n");
             }
         } else if (q.op == 4) {
             if (q.b > q.c) {
-                cout << "0\n";
+                print_str("0\n");
             } else {
                 int l_pos = lower_bound(vals.begin(), vals.end(), q.b) - vals.begin() + 1;
                 int r_pos = upper_bound(vals.begin(), vals.end(), q.c) - vals.begin();
                 if (l_pos <= r_pos) {
-                    cout << query_sum(root[q.a], 1, M, l_pos, r_pos) << "\n";
+                    print_ll(query_sum(root[q.a], 1, M, l_pos, r_pos));
+                    pc('\n');
                 } else {
-                    cout << "0\n";
+                    print_str("0\n");
                 }
             }
         } else if (q.op == 5) {
@@ -185,9 +251,10 @@ int main() {
                 }
             }
             if (valid) {
-                cout << it_val << "\n";
+                print_ll(it_val);
+                pc('\n');
             } else {
-                cout << "-1\n";
+                print_str("-1\n");
             }
         } else if (q.op == 6) {
             if (valid) {
@@ -200,12 +267,14 @@ int main() {
                 }
             }
             if (valid) {
-                cout << it_val << "\n";
+                print_ll(it_val);
+                pc('\n');
             } else {
-                cout << "-1\n";
+                print_str("-1\n");
             }
         }
     }
     
+    flush();
     return 0;
 }
