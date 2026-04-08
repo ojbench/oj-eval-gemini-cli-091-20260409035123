@@ -265,5 +265,10 @@ int main() {
             }
         }
     }
+    
+    for (Node* chunk : chunks) {
+        delete[] chunk;
+    }
+    
     return 0;
 }
