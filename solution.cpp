@@ -220,6 +220,9 @@ int main() {
     for (Node* chunk : chunks) {
         delete[] chunk;
     }
+    vector<Node*>().swap(chunks);
+    vector<Query>().swap(queries);
+    vector<long long>().swap(vals);
     
     return 0;
 }
