@@ -1,19 +1,166 @@
 #include <iostream>
 #include <vector>
-#include <ext/pb_ds/assoc_container.hpp>
-#include <ext/pb_ds/tree_policy.hpp>
 
 using namespace std;
-using namespace __gnu_pbds;
 
-typedef tree<long long, null_type, less<long long>, rb_tree_tag, tree_order_statistics_node_update> ordered_set;
+struct Node {
+    int l, r;
+    int size;
+    long long val;
+    unsigned int pri;
+};
 
-vector<ordered_set> s;
+const int MAX_NODES = 50000005;
+Node tr[MAX_NODES];
+int root[100005];
+int node_cnt = 0;
 
-void ensure_size(int idx) {
-    if (idx >= s.size()) {
-        s.resize(idx + 1);
+unsigned int seed = 131;
+unsigned int rand_pri() {
+    seed = seed * 19260817 + 1;
+    return seed;
+}
+
+int new_node(long long val) {
+    int p = ++node_cnt;
+    tr[p].l = tr[p].r = 0;
+    tr[p].size = 1;
+    tr[p].val = val;
+    tr[p].pri = rand_pri();
+    return p;
+}
+
+int clone_node(int p) {
+    if (!p) return 0;
+    int q = ++node_cnt;
+    tr[q] = tr[p];
+    return q;
+}
+
+void push_up(int p) {
+    tr[p].size = tr[tr[p].l].size + tr[tr[p].r].size + 1;
+}
+
+void split(int p, long long val, int &x, int &y) {
+    if (!p) {
+        x = y = 0;
+        return;
     }
+    int q = clone_node(p);
+    if (tr[q].val <= val) {
+        x = q;
+        split(tr[q].r, val, tr[q].r, y);
+    } else {
+        y = q;
+        split(tr[q].l, val, x, tr[q].l);
+    }
+    push_up(q);
+}
+
+int merge(int x, int y) {
+    if (!x || !y) return x ? clone_node(x) : clone_node(y);
+    if (tr[x].pri > tr[y].pri) {
+        int q = clone_node(x);
+        tr[q].r = merge(tr[q].r, y);
+        push_up(q);
+        return q;
+    } else {
+        int q = clone_node(y);
+        tr[q].l = merge(x, tr[q].l);
+        push_up(q);
+        return q;
+    }
+}
+
+bool find(int rt, long long val) {
+    int p = rt;
+    while (p) {
+        if (tr[p].val == val) return true;
+        if (tr[p].val < val) p = tr[p].r;
+        else p = tr[p].l;
+    }
+    return false;
+}
+
+bool insert(int &rt, long long val) {
+    if (find(rt, val)) return false;
+    int x, y;
+    split(rt, val, x, y);
+    rt = merge(merge(x, new_node(val)), y);
+    return true;
+}
+
+void erase(int &rt, long long val) {
+    if (!find(rt, val)) return;
+    int x, y, z;
+    split(rt, val, x, z);
+    split(x, val - 1, x, y);
+    rt = merge(x, z);
+}
+
+int count_less_equal(int rt, long long val) {
+    int p = rt;
+    int res = 0;
+    while (p) {
+        if (tr[p].val <= val) {
+            res += tr[tr[p].l].size + 1;
+            p = tr[p].r;
+        } else {
+            p = tr[p].l;
+        }
+    }
+    return res;
+}
+
+int range(int rt, long long l, long long r) {
+    if (l > r) return 0;
+    return count_less_equal(rt, r) - count_less_equal(rt, l - 1);
+}
+
+long long get_pred(int rt, long long val) {
+    int p = rt;
+    long long res = -1;
+    bool found = false;
+    while (p) {
+        if (tr[p].val < val) {
+            res = tr[p].val;
+            found = true;
+            p = tr[p].r;
+        } else {
+            p = tr[p].l;
+        }
+    }
+    return found ? res : -1;
+}
+
+long long get_succ(int rt, long long val) {
+    int p = rt;
+    long long res = -1;
+    bool found = false;
+    while (p) {
+        if (tr[p].val > val) {
+            res = tr[p].val;
+            found = true;
+            p = tr[p].l;
+        } else {
+            p = tr[p].r;
+        }
+    }
+    return found ? res : -1;
+}
+
+long long get_min(int rt) {
+    int p = rt;
+    if (!p) return -1;
+    while (tr[p].l) p = tr[p].l;
+    return tr[p].val;
+}
+
+long long get_max(int rt) {
+    int p = rt;
+    if (!p) return -1;
+    while (tr[p].r) p = tr[p].r;
+    return tr[p].val;
 }
 
 int main() {
@@ -30,31 +177,25 @@ int main() {
         long long a, b, c;
         if (op == 0) {
             cin >> a >> b;
-            ensure_size(a);
-            auto res = s[a].insert(b);
-            if (res.second) {
+            bool res = insert(root[a], b);
+            if (res) {
                 it_a = a;
                 it_val = b;
                 valid = true;
             }
         } else if (op == 1) {
             cin >> a >> b;
-            ensure_size(a);
             if (valid && it_a == a && it_val == b) {
                 valid = false;
             }
-            s[a].erase(b);
+            erase(root[a], b);
         } else if (op == 2) {
             cin >> a;
-            ensure_size(a);
             ++lst;
-            ensure_size(lst);
-            s[lst] = s[a];
+            root[lst] = root[a];
         } else if (op == 3) {
             cin >> a >> b;
-            ensure_size(a);
-            auto it = s[a].find(b);
-            if (it != s[a].end()) {
+            if (find(root[a], b)) {
                 cout << "true\n";
                 it_a = a;
                 it_val = b;
@@ -64,22 +205,19 @@ int main() {
             }
         } else if (op == 4) {
             cin >> a >> b >> c;
-            ensure_size(a);
-            if (b > c) {
-                cout << "0\n";
-            } else {
-                int cnt = s[a].order_of_key(c + 1) - s[a].order_of_key(b);
-                cout << cnt << "\n";
-            }
+            cout << range(root[a], b, c) << "\n";
         } else if (op == 5) {
             if (valid) {
-                ensure_size(it_a);
-                auto it = s[it_a].find(it_val);
-                if (it == s[it_a].begin()) {
+                long long min_val = get_min(root[it_a]);
+                if (it_val == min_val) {
                     valid = false;
                 } else {
-                    --it;
-                    it_val = *it;
+                    long long pred = get_pred(root[it_a], it_val);
+                    if (pred != -1) {
+                        it_val = pred;
+                    } else {
+                        valid = false;
+                    }
                 }
             }
             if (valid) {
@@ -89,14 +227,11 @@ int main() {
             }
         } else if (op == 6) {
             if (valid) {
-                ensure_size(it_a);
-                auto it = s[it_a].find(it_val);
-                auto it2 = it;
-                ++it2;
-                if (it2 == s[it_a].end()) {
-                    valid = false;
+                long long succ = get_succ(root[it_a], it_val);
+                if (succ != -1) {
+                    it_val = succ;
                 } else {
-                    it_val = *it2;
+                    valid = false;
                 }
             }
             if (valid) {
