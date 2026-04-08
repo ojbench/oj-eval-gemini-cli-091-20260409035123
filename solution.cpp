@@ -1,13 +1,20 @@
 #include <iostream>
 #include <vector>
+#include <algorithm>
 
 using namespace std;
 
+struct Query {
+    int op;
+    long long a, b, c;
+};
+
+vector<Query> queries;
+vector<long long> vals;
+
 struct Node {
     int l, r;
-    int size;
-    long long val;
-    unsigned int pri;
+    int sum;
 };
 
 const int CHUNK_SIZE = 1000000;
@@ -18,227 +25,170 @@ Node& get_node(int id) {
     return chunks[id / CHUNK_SIZE][id % CHUNK_SIZE];
 }
 
-int root[100005];
-
-unsigned int seed = 131;
-unsigned int rand_pri() {
-    seed = seed * 19260817 + 1;
-    return seed;
-}
-
-int new_node(long long val) {
+int new_node() {
     int p = ++node_cnt;
     if (p / CHUNK_SIZE >= chunks.size()) {
         chunks.push_back(new Node[CHUNK_SIZE]);
     }
     Node& n = get_node(p);
-    n.l = n.r = 0;
-    n.size = 1;
-    n.val = val;
-    n.pri = rand_pri();
+    n.l = n.r = n.sum = 0;
     return p;
 }
 
 int clone_node(int p) {
-    if (!p) return 0;
-    int q = ++node_cnt;
-    if (q / CHUNK_SIZE >= chunks.size()) {
-        chunks.push_back(new Node[CHUNK_SIZE]);
-    }
+    int q = new_node();
     get_node(q) = get_node(p);
     return q;
 }
 
-void push_up(int p) {
-    Node& n = get_node(p);
-    n.size = (n.l ? get_node(n.l).size : 0) + (n.r ? get_node(n.r).size : 0) + 1;
-}
-
-void split(int p, long long val, int &x, int &y) {
-    if (!p) {
-        x = y = 0;
-        return;
-    }
-    int q = clone_node(p);
-    Node& nq = get_node(q);
-    if (nq.val <= val) {
-        x = q;
-        split(nq.r, val, nq.r, y);
+void update(int &p, int pre, int l, int r, int pos, int val) {
+    p = clone_node(pre);
+    get_node(p).sum += val;
+    if (l == r) return;
+    int mid = l + (r - l) / 2;
+    if (pos <= mid) {
+        update(get_node(p).l, get_node(pre).l, l, mid, pos, val);
     } else {
-        y = q;
-        split(nq.l, val, x, nq.l);
-    }
-    push_up(q);
-}
-
-int merge(int x, int y) {
-    if (!x || !y) return x ? clone_node(x) : clone_node(y);
-    Node& nx = get_node(x);
-    Node& ny = get_node(y);
-    if (nx.pri > ny.pri) {
-        int q = clone_node(x);
-        Node& nq = get_node(q);
-        nq.r = merge(nq.r, y);
-        push_up(q);
-        return q;
-    } else {
-        int q = clone_node(y);
-        Node& nq = get_node(q);
-        nq.l = merge(x, nq.l);
-        push_up(q);
-        return q;
+        update(get_node(p).r, get_node(pre).r, mid + 1, r, pos, val);
     }
 }
 
-bool find(int rt, long long val) {
-    int p = rt;
-    while (p) {
-        Node& np = get_node(p);
-        if (np.val == val) return true;
-        if (np.val < val) p = np.r;
-        else p = np.l;
+int query_sum(int p, int l, int r, int ql, int qr) {
+    if (!p || ql > r || qr < l) return 0;
+    if (ql <= l && r <= qr) return get_node(p).sum;
+    int mid = l + (r - l) / 2;
+    return query_sum(get_node(p).l, l, mid, ql, qr) + query_sum(get_node(p).r, mid + 1, r, ql, qr);
+}
+
+int query_count(int p, int l, int r, int pos) {
+    if (!p) return 0;
+    if (l == r) return get_node(p).sum;
+    int mid = l + (r - l) / 2;
+    if (pos <= mid) return query_count(get_node(p).l, l, mid, pos);
+    else return query_count(get_node(p).r, mid + 1, r, pos);
+}
+
+int find_pred(int p, int l, int r, int pos) {
+    if (!p || get_node(p).sum == 0 || l >= pos) return -1;
+    if (l == r) return l;
+    int mid = l + (r - l) / 2;
+    int res = -1;
+    if (mid + 1 < pos) {
+        res = find_pred(get_node(p).r, mid + 1, r, pos);
     }
-    return false;
+    if (res != -1) return res;
+    return find_pred(get_node(p).l, l, mid, pos);
 }
 
-bool insert(int &rt, long long val) {
-    if (find(rt, val)) return false;
-    int x, y;
-    split(rt, val, x, y);
-    rt = merge(merge(x, new_node(val)), y);
-    return true;
-}
-
-void erase(int &rt, long long val) {
-    if (!find(rt, val)) return;
-    int x, y, z;
-    split(rt, val, x, z);
-    split(x, val - 1, x, y);
-    rt = merge(x, z);
-}
-
-int count_less_equal(int rt, long long val) {
-    int p = rt;
-    int res = 0;
-    while (p) {
-        Node& np = get_node(p);
-        if (np.val <= val) {
-            res += (np.l ? get_node(np.l).size : 0) + 1;
-            p = np.r;
-        } else {
-            p = np.l;
-        }
+int find_succ(int p, int l, int r, int pos) {
+    if (!p || get_node(p).sum == 0 || r <= pos) return -1;
+    if (l == r) return l;
+    int mid = l + (r - l) / 2;
+    int res = -1;
+    if (mid > pos) {
+        res = find_succ(get_node(p).l, l, mid, pos);
     }
-    return res;
+    if (res != -1) return res;
+    return find_succ(get_node(p).r, mid + 1, r, pos);
 }
 
-int range(int rt, long long l, long long r) {
-    if (l > r) return 0;
-    return count_less_equal(rt, r) - count_less_equal(rt, l - 1);
+int find_min(int p, int l, int r) {
+    if (!p || get_node(p).sum == 0) return -1;
+    if (l == r) return l;
+    int mid = l + (r - l) / 2;
+    if (get_node(get_node(p).l).sum > 0) return find_min(get_node(p).l, l, mid);
+    return find_min(get_node(p).r, mid + 1, r);
 }
 
-long long get_pred(int rt, long long val) {
-    int p = rt;
-    long long res = -1;
-    bool found = false;
-    while (p) {
-        Node& np = get_node(p);
-        if (np.val < val) {
-            res = np.val;
-            found = true;
-            p = np.r;
-        } else {
-            p = np.l;
-        }
-    }
-    return found ? res : -1;
-}
-
-long long get_succ(int rt, long long val) {
-    int p = rt;
-    long long res = -1;
-    bool found = false;
-    while (p) {
-        Node& np = get_node(p);
-        if (np.val > val) {
-            res = np.val;
-            found = true;
-            p = np.l;
-        } else {
-            p = np.r;
-        }
-    }
-    return found ? res : -1;
-}
-
-long long get_min(int rt) {
-    int p = rt;
-    if (!p) return -1;
-    while (get_node(p).l) p = get_node(p).l;
-    return get_node(p).val;
-}
-
-long long get_max(int rt) {
-    int p = rt;
-    if (!p) return -1;
-    while (get_node(p).r) p = get_node(p).r;
-    return get_node(p).val;
-}
+int root[100005];
 
 int main() {
     ios_base::sync_with_stdio(false);
     cin.tie(NULL);
     
+    int op;
+    while (cin >> op) {
+        Query q;
+        q.op = op;
+        if (op == 0 || op == 1 || op == 3) {
+            cin >> q.a >> q.b;
+            vals.push_back(q.b);
+        } else if (op == 2) {
+            cin >> q.a;
+        } else if (op == 4) {
+            cin >> q.a >> q.b >> q.c;
+            vals.push_back(q.b);
+            vals.push_back(q.c);
+        }
+        queries.push_back(q);
+    }
+    
+    sort(vals.begin(), vals.end());
+    vals.erase(unique(vals.begin(), vals.end()), vals.end());
+    
+    int M = vals.size();
+    if (M == 0) M = 1;
+    
     chunks.push_back(new Node[CHUNK_SIZE]); // For node 0
     
-    int op;
     int lst = 0;
     int it_a = -1;
     long long it_val = 0;
     bool valid = false;
     
-    while (cin >> op) {
-        long long a, b, c;
-        if (op == 0) {
-            cin >> a >> b;
-            bool res = insert(root[a], b);
-            if (res) {
-                it_a = a;
-                it_val = b;
+    for (const auto& q : queries) {
+        if (q.op == 0) {
+            int pos = lower_bound(vals.begin(), vals.end(), q.b) - vals.begin() + 1;
+            if (query_count(root[q.a], 1, M, pos) == 0) {
+                update(root[q.a], root[q.a], 1, M, pos, 1);
+                it_a = q.a;
+                it_val = q.b;
                 valid = true;
             }
-        } else if (op == 1) {
-            cin >> a >> b;
-            if (valid && it_a == a && it_val == b) {
+        } else if (q.op == 1) {
+            int pos = lower_bound(vals.begin(), vals.end(), q.b) - vals.begin() + 1;
+            if (valid && it_a == q.a && it_val == q.b) {
                 valid = false;
             }
-            erase(root[a], b);
-        } else if (op == 2) {
-            cin >> a;
+            if (query_count(root[q.a], 1, M, pos) > 0) {
+                update(root[q.a], root[q.a], 1, M, pos, -1);
+            }
+        } else if (q.op == 2) {
             ++lst;
-            root[lst] = root[a];
-        } else if (op == 3) {
-            cin >> a >> b;
-            if (find(root[a], b)) {
+            root[lst] = root[q.a];
+        } else if (q.op == 3) {
+            int pos = lower_bound(vals.begin(), vals.end(), q.b) - vals.begin() + 1;
+            if (query_count(root[q.a], 1, M, pos) > 0) {
                 cout << "true\n";
-                it_a = a;
-                it_val = b;
+                it_a = q.a;
+                it_val = q.b;
                 valid = true;
             } else {
                 cout << "false\n";
             }
-        } else if (op == 4) {
-            cin >> a >> b >> c;
-            cout << range(root[a], b, c) << "\n";
-        } else if (op == 5) {
+        } else if (q.op == 4) {
+            if (q.b > q.c) {
+                cout << "0\n";
+            } else {
+                int l_pos = lower_bound(vals.begin(), vals.end(), q.b) - vals.begin() + 1;
+                int r_pos = upper_bound(vals.begin(), vals.end(), q.c) - vals.begin();
+                if (l_pos <= r_pos) {
+                    cout << query_sum(root[q.a], 1, M, l_pos, r_pos) << "\n";
+                } else {
+                    cout << "0\n";
+                }
+            }
+        } else if (q.op == 5) {
             if (valid) {
-                long long min_val = get_min(root[it_a]);
+                int min_pos = find_min(root[it_a], 1, M);
+                long long min_val = (min_pos != -1) ? vals[min_pos - 1] : -1;
                 if (it_val == min_val) {
                     valid = false;
                 } else {
-                    long long pred = get_pred(root[it_a], it_val);
-                    if (pred != -1) {
-                        it_val = pred;
+                    int pos = lower_bound(vals.begin(), vals.end(), it_val) - vals.begin() + 1;
+                    int pred_pos = find_pred(root[it_a], 1, M, pos);
+                    if (pred_pos != -1) {
+                        it_val = vals[pred_pos - 1];
                     } else {
                         valid = false;
                     }
@@ -249,11 +199,12 @@ int main() {
             } else {
                 cout << "-1\n";
             }
-        } else if (op == 6) {
+        } else if (q.op == 6) {
             if (valid) {
-                long long succ = get_succ(root[it_a], it_val);
-                if (succ != -1) {
-                    it_val = succ;
+                int pos = lower_bound(vals.begin(), vals.end(), it_val) - vals.begin() + 1;
+                int succ_pos = find_succ(root[it_a], 1, M, pos);
+                if (succ_pos != -1) {
+                    it_val = vals[succ_pos - 1];
                 } else {
                     valid = false;
                 }
