@@ -10,10 +10,15 @@ struct Node {
     unsigned int pri;
 };
 
-const int MAX_NODES = 50000005;
-Node tr[MAX_NODES];
-int root[100005];
+const int CHUNK_SIZE = 1000000;
+vector<Node*> chunks;
 int node_cnt = 0;
+
+Node& get_node(int id) {
+    return chunks[id / CHUNK_SIZE][id % CHUNK_SIZE];
+}
+
+int root[100005];
 
 unsigned int seed = 131;
 unsigned int rand_pri() {
@@ -23,22 +28,30 @@ unsigned int rand_pri() {
 
 int new_node(long long val) {
     int p = ++node_cnt;
-    tr[p].l = tr[p].r = 0;
-    tr[p].size = 1;
-    tr[p].val = val;
-    tr[p].pri = rand_pri();
+    if (p / CHUNK_SIZE >= chunks.size()) {
+        chunks.push_back(new Node[CHUNK_SIZE]);
+    }
+    Node& n = get_node(p);
+    n.l = n.r = 0;
+    n.size = 1;
+    n.val = val;
+    n.pri = rand_pri();
     return p;
 }
 
 int clone_node(int p) {
     if (!p) return 0;
     int q = ++node_cnt;
-    tr[q] = tr[p];
+    if (q / CHUNK_SIZE >= chunks.size()) {
+        chunks.push_back(new Node[CHUNK_SIZE]);
+    }
+    get_node(q) = get_node(p);
     return q;
 }
 
 void push_up(int p) {
-    tr[p].size = tr[tr[p].l].size + tr[tr[p].r].size + 1;
+    Node& n = get_node(p);
+    n.size = (n.l ? get_node(n.l).size : 0) + (n.r ? get_node(n.r).size : 0) + 1;
 }
 
 void split(int p, long long val, int &x, int &y) {
@@ -47,26 +60,31 @@ void split(int p, long long val, int &x, int &y) {
         return;
     }
     int q = clone_node(p);
-    if (tr[q].val <= val) {
+    Node& nq = get_node(q);
+    if (nq.val <= val) {
         x = q;
-        split(tr[q].r, val, tr[q].r, y);
+        split(nq.r, val, nq.r, y);
     } else {
         y = q;
-        split(tr[q].l, val, x, tr[q].l);
+        split(nq.l, val, x, nq.l);
     }
     push_up(q);
 }
 
 int merge(int x, int y) {
     if (!x || !y) return x ? clone_node(x) : clone_node(y);
-    if (tr[x].pri > tr[y].pri) {
+    Node& nx = get_node(x);
+    Node& ny = get_node(y);
+    if (nx.pri > ny.pri) {
         int q = clone_node(x);
-        tr[q].r = merge(tr[q].r, y);
+        Node& nq = get_node(q);
+        nq.r = merge(nq.r, y);
         push_up(q);
         return q;
     } else {
         int q = clone_node(y);
-        tr[q].l = merge(x, tr[q].l);
+        Node& nq = get_node(q);
+        nq.l = merge(x, nq.l);
         push_up(q);
         return q;
     }
@@ -75,9 +93,10 @@ int merge(int x, int y) {
 bool find(int rt, long long val) {
     int p = rt;
     while (p) {
-        if (tr[p].val == val) return true;
-        if (tr[p].val < val) p = tr[p].r;
-        else p = tr[p].l;
+        Node& np = get_node(p);
+        if (np.val == val) return true;
+        if (np.val < val) p = np.r;
+        else p = np.l;
     }
     return false;
 }
@@ -102,11 +121,12 @@ int count_less_equal(int rt, long long val) {
     int p = rt;
     int res = 0;
     while (p) {
-        if (tr[p].val <= val) {
-            res += tr[tr[p].l].size + 1;
-            p = tr[p].r;
+        Node& np = get_node(p);
+        if (np.val <= val) {
+            res += (np.l ? get_node(np.l).size : 0) + 1;
+            p = np.r;
         } else {
-            p = tr[p].l;
+            p = np.l;
         }
     }
     return res;
@@ -122,12 +142,13 @@ long long get_pred(int rt, long long val) {
     long long res = -1;
     bool found = false;
     while (p) {
-        if (tr[p].val < val) {
-            res = tr[p].val;
+        Node& np = get_node(p);
+        if (np.val < val) {
+            res = np.val;
             found = true;
-            p = tr[p].r;
+            p = np.r;
         } else {
-            p = tr[p].l;
+            p = np.l;
         }
     }
     return found ? res : -1;
@@ -138,12 +159,13 @@ long long get_succ(int rt, long long val) {
     long long res = -1;
     bool found = false;
     while (p) {
-        if (tr[p].val > val) {
-            res = tr[p].val;
+        Node& np = get_node(p);
+        if (np.val > val) {
+            res = np.val;
             found = true;
-            p = tr[p].l;
+            p = np.l;
         } else {
-            p = tr[p].r;
+            p = np.r;
         }
     }
     return found ? res : -1;
@@ -152,20 +174,22 @@ long long get_succ(int rt, long long val) {
 long long get_min(int rt) {
     int p = rt;
     if (!p) return -1;
-    while (tr[p].l) p = tr[p].l;
-    return tr[p].val;
+    while (get_node(p).l) p = get_node(p).l;
+    return get_node(p).val;
 }
 
 long long get_max(int rt) {
     int p = rt;
     if (!p) return -1;
-    while (tr[p].r) p = tr[p].r;
-    return tr[p].val;
+    while (get_node(p).r) p = get_node(p).r;
+    return get_node(p).val;
 }
 
 int main() {
     ios_base::sync_with_stdio(false);
     cin.tie(NULL);
+    
+    chunks.push_back(new Node[CHUNK_SIZE]); // For node 0
     
     int op;
     int lst = 0;
